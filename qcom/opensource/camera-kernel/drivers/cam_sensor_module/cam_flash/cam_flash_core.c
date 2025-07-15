@@ -11,6 +11,63 @@
 #include "cam_res_mgr_api.h"
 #include "cam_common_util.h"
 #include "cam_packet_util.h"
+#include <linux/math64.h>
+
+#include "cam_sensor_util.h"
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
+#include <linux/of.h>
+#ifdef CONFIG_FLASHLIGHT_PWM
+#include "../cam_flash_pm6450_gpio/pm6450_flash_gpio.h"
+int cam_gpio_flash_on(struct cam_flash_ctrl *flash_ctrl,struct pwm_setting * pwm)
+{
+	int rc = 0;
+	struct cam_hw_soc_info  soc_info = flash_ctrl->soc_info;
+	struct cam_flash_private_soc *soc_private = 
+	(struct cam_flash_private_soc *)soc_info.soc_private;
+	CAM_ERR(CAM_FLASH, "cam_gpio_flash_on");
+	pm6450_flash_gpio_select_state(PM6450_FLASH_GPIO_STATE_ACTIVE,pwm);
+	rc = cam_res_mgr_gpio_request(soc_info.dev, soc_private->flash_gpio_enable, 
+	0, "flash_enf");
+	if(rc) {
+		CAM_ERR(CAM_FLASH, "gpio %d request fails", soc_private->flash_gpio_enable);
+		return rc;
+	}
+	cam_res_mgr_gpio_set_value(soc_private->flash_gpio_enable, 1);
+	return rc;
+}
+
+int cam_gpio_flash_off(struct cam_flash_ctrl *flash_ctrl,struct pwm_setting * pwm)
+{
+	int rc = 0;
+	struct cam_hw_soc_info  soc_info = flash_ctrl->soc_info;
+	struct cam_flash_private_soc *soc_private = 
+		(struct cam_flash_private_soc *)soc_info.soc_private;
+	CAM_ERR(CAM_FLASH,"cam_gpio_flash_off");
+	rc = cam_res_mgr_gpio_request(soc_info.dev, soc_private->flash_gpio_enable,
+	0, "flash_enf");
+	if(rc) {
+		CAM_ERR(CAM_FLASH, "gpio %d request fails", soc_private->flash_gpio_enable);
+		return rc;
+	}
+	cam_res_mgr_gpio_set_value(soc_private->flash_gpio_enable, 0);
+	cam_res_mgr_gpio_free(soc_info.dev, soc_private->flash_gpio_enable);
+	pm6450_flash_gpio_select_state(PM6450_FLASH_GPIO_STATE_SUSPEND,pwm);
+	return rc;
+}
+
+void cam_torch_on(struct cam_flash_ctrl *flash_ctrl, struct pwm_setting *pwm)
+{
+	CAM_ERR(CAM_FLASH, "cam_torch_on");
+	pm6450_flash_gpio_select_state(PM6450_FLASH_GPIO_STATE_ACTIVE, pwm);
+}
+
+void cam_torch_off(struct cam_flash_ctrl *flash_ctrl,struct pwm_setting *pwm)
+{
+	CAM_ERR(CAM_FLASH, "cam_torch_off");
+	pm6450_flash_gpio_select_state(PM6450_FLASH_GPIO_STATE_SUSPEND, pwm);
+}
+#endif
 
 static int cam_flash_prepare(struct cam_flash_ctrl *flash_ctrl,
 	bool regulator_enable)
@@ -563,16 +620,27 @@ static int cam_flash_ops(struct cam_flash_ctrl *flash_ctrl,
 int cam_flash_off(struct cam_flash_ctrl *flash_ctrl)
 {
 	int rc = 0;
-
+	#ifdef CONFIG_FLASHLIGHT_PWM
+	struct cam_hw_soc_info  soc_info = flash_ctrl->soc_info;
+	struct cam_flash_private_soc *soc_private =
+		(struct cam_flash_private_soc *)soc_info.soc_private;
+	struct pwm_setting pwm;
+	#endif
 	if (!flash_ctrl) {
 		CAM_ERR(CAM_FLASH, "Flash control Null");
 		return -EINVAL;
 	}
-	CAM_DBG(CAM_FLASH, "Flash OFF Triggered");
 	if (flash_ctrl->switch_trigger)
 		cam_res_mgr_led_trigger_event(flash_ctrl->switch_trigger,
 			(enum led_brightness)LED_SWITCH_OFF);
-
+	CAM_ERR(CAM_SENSOR,"cam_flash_off");
+	#ifdef CONFIG_FLASHLIGHT_PWM
+	pwm.period_ns = 50000;
+	pwm.duty_ns = 50000;
+	cam_res_mgr_gpio_set_value(soc_private->flash_gpio_enable, 0);
+	cam_res_mgr_gpio_free(soc_info.dev, soc_private->flash_gpio_enable);	
+	pm6450_flash_gpio_select_state(PM6450_FLASH_GPIO_STATE_SUSPEND, &pwm);
+	#endif
 	if ((flash_ctrl->i2c_data.streamoff_settings.is_settings_valid) &&
 		(flash_ctrl->i2c_data.streamoff_settings.request_id == 0)) {
 		flash_ctrl->apply_streamoff = true;
@@ -590,32 +658,57 @@ static int cam_flash_low(
 	struct cam_flash_frame_setting *flash_data)
 {
 	int i = 0, rc = 0;
-
+	#ifdef CONFIG_FLASHLIGHT_PWM
+	struct pwm_setting pwm;
+	struct cam_hw_soc_info  soc_info = flash_ctrl->soc_info;
+	struct cam_flash_private_soc *soc_private = 
+		(struct cam_flash_private_soc *)soc_info.soc_private;
+	#endif
 	if (!flash_data) {
 		CAM_ERR(CAM_FLASH, "Flash Data Null");
 		return -EINVAL;
 	}
-
+	CAM_ERR(CAM_FLASH, "cam_flash_low +");
 	for (i = 0; i < flash_ctrl->flash_num_sources; i++)
 		if (flash_ctrl->flash_trigger[i])
 			cam_res_mgr_led_trigger_event(
 				flash_ctrl->flash_trigger[i],
 				LED_OFF);
-
+	#ifdef CONFIG_FLASHLIGHT_PWM
+	rc = cam_res_mgr_gpio_request(soc_info.dev, soc_private->flash_gpio_enable, 
+				0, "flash_enf");
+	if(rc) {
+		CAM_ERR(CAM_FLASH, "gpio %d request fails", soc_private->flash_gpio_enable);
+		return rc;
+	}
+	cam_res_mgr_gpio_set_value(soc_private->flash_gpio_enable, 0);
+	pwm.period_ns = 50000;
+	pwm.duty_ns = 50000;
+	pm6450_flash_gpio_select_state(PM6450_FLASH_GPIO_STATE_ACTIVE,&pwm);
+	msleep(5);
+	pwm.duty_ns = 17500;//35% for torch mode
+	pm6450_flash_gpio_select_state(PM6450_FLASH_GPIO_STATE_ACTIVE,&pwm);
+	#endif
 	rc = cam_flash_ops(flash_ctrl, flash_data,
 		CAMERA_SENSOR_FLASH_OP_FIRELOW);
 	if (rc)
 		CAM_ERR(CAM_FLASH, "Fire Torch failed: %d", rc);
-
+	CAM_ERR(CAM_FLASH, "cam_flash_low -");
 	return rc;
 }
 
+#ifdef CONFIG_FACTORY_MODE
 static int cam_flash_high(
 	struct cam_flash_ctrl *flash_ctrl,
 	struct cam_flash_frame_setting *flash_data)
 {
 	int i = 0, rc = 0;
-
+	#ifdef CONFIG_FLASHLIGHT_PWM
+	struct pwm_setting pwm;
+	struct cam_hw_soc_info  soc_info = flash_ctrl->soc_info;
+	struct cam_flash_private_soc *soc_private =
+			(struct cam_flash_private_soc *)soc_info.soc_private;
+	#endif
 	if (!flash_data) {
 		CAM_ERR(CAM_FLASH, "Flash Data Null");
 		return -EINVAL;
@@ -627,14 +720,73 @@ static int cam_flash_high(
 				flash_ctrl->torch_trigger[i],
 				LED_OFF);
 
+	CAM_ERR(CAM_FLASH, "[FACTORY]cam_flash_high +");
+	#ifdef CONFIG_FLASHLIGHT_PWM
+	pwm.period_ns = 50000;
+	pwm.duty_ns = 44000; //88% for main flash mode
+	pm6450_flash_gpio_select_state(PM6450_FLASH_GPIO_STATE_ACTIVE, &pwm);
+	rc = cam_res_mgr_gpio_request(soc_info.dev, soc_private->flash_gpio_enable,
+	 0, "flash_enf");
+	if(rc) {
+		CAM_ERR(CAM_FLASH, "gpio %d request fails", soc_private->flash_gpio_enable);
+		return rc;
+	}
+	cam_res_mgr_gpio_set_value(soc_private->flash_gpio_enable, 1);
+	#endif
 	rc = cam_flash_ops(flash_ctrl, flash_data,
 		CAMERA_SENSOR_FLASH_OP_FIREHIGH);
 	if (rc)
 		CAM_ERR(CAM_FLASH, "Fire Flash Failed: %d", rc);
-
+	CAM_ERR(CAM_FLASH, "[FACTORY]cam_flash_high -");
 	return rc;
 }
+#else
+static int cam_flash_high(
+	struct cam_flash_ctrl *flash_ctrl,
+	struct cam_flash_frame_setting *flash_data)
+{
+	int i = 0, rc = 0;
+	#ifdef CONFIG_FLASHLIGHT_PWM
+	struct pwm_setting pwm;
+	//struct cam_hw_soc_info  soc_info = flash_ctrl->soc_info;
+	// struct cam_flash_private_soc *soc_private = 
+	// 		(struct cam_flash_private_soc *)soc_info.soc_private;
+	#endif
+	if (!flash_data) {
+		CAM_ERR(CAM_FLASH, "Flash Data Null");
+		return -EINVAL;
+	}
 
+	for (i = 0; i < flash_ctrl->torch_num_sources; i++)
+		if (flash_ctrl->torch_trigger[i])
+			cam_res_mgr_led_trigger_event(
+				flash_ctrl->torch_trigger[i],
+				LED_OFF);
+
+	CAM_ERR(CAM_FLASH, "[MIUI]cam_flash_high +");
+	#ifdef CONFIG_FLASHLIGHT_PWM
+	pwm.period_ns = 50000;
+	pwm.duty_ns = 50000;
+	pm6450_flash_gpio_select_state(PM6450_FLASH_GPIO_STATE_ACTIVE,&pwm);
+	msleep(5);
+	pwm.duty_ns = 45000; //90% for main flash mode
+	pm6450_flash_gpio_select_state(PM6450_FLASH_GPIO_STATE_ACTIVE, &pwm);
+	// rc = cam_res_mgr_gpio_request(soc_info.dev, soc_private->flash_gpio_enable,
+	//  0, "flash_enf");
+	// if(rc) {
+	// 	CAM_ERR(CAM_FLASH, "gpio %d request fails", soc_private->flash_gpio_enable);
+	// 	return rc;
+	// }
+	// cam_res_mgr_gpio_set_value(soc_private->flash_gpio_enable, 1);
+	#endif
+	rc = cam_flash_ops(flash_ctrl, flash_data,
+		CAMERA_SENSOR_FLASH_OP_FIREHIGH);
+	if (rc)
+		CAM_ERR(CAM_FLASH, "Fire Flash Failed: %d", rc);
+	CAM_ERR(CAM_FLASH, "[MIUI]cam_flash_high -");
+	return rc;
+}
+#endif
 static int cam_flash_duration(struct cam_flash_ctrl *fctrl,
 	struct cam_flash_frame_setting *flash_data)
 {

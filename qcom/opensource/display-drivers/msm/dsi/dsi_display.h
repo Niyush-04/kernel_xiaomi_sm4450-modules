@@ -20,7 +20,9 @@
 #include "dsi_ctrl.h"
 #include "dsi_phy.h"
 #include "dsi_panel.h"
-
+#if IS_ENABLED(CONFIG_XIAOMI_TOUCH_NOTIFIER)
+#include <misc/xiaomi_touch_notifier.h>
+#endif
 #define MAX_DSI_CTRLS_PER_DISPLAY             2
 #define DSI_CLIENT_NAME_SIZE		20
 #define MAX_CMDLINE_PARAM_LEN	 512
@@ -205,7 +207,9 @@ struct dsi_display {
 	struct drm_device *drm_dev;
 	struct drm_connector *drm_conn;
 	struct drm_connector *ext_conn;
-
+#if IS_ENABLED(CONFIG_XIAOMI_TOUCH_NOTIFIER)
+	struct notifier_block xiaomi_touch_notif;
+#endif
 	const char *name;
 	const char *display_type;
 	struct list_head list;
@@ -304,6 +308,11 @@ struct dsi_display {
 	struct dsi_panel_cmd_set cmd_set;
 
 	bool enabled;
+
+	struct class *display_class;
+	struct device *backlight_clone_devce;
+	struct device *disp_param_devce;
+	int brightness_clone;
 };
 
 int dsi_display_dev_probe(struct platform_device *pdev);
@@ -835,5 +844,7 @@ int dsi_display_restore_bit_clk(struct dsi_display *display, struct dsi_display_
  */
 bool dsi_display_mode_match(const struct dsi_display_mode *mode1,
 		struct dsi_display_mode *mode2, unsigned int match_flags);
-
+int dsi_display_cmd_engine_enable(struct dsi_display *display);
+int dsi_display_cmd_engine_disable(struct dsi_display *display);
+int dsi_host_alloc_cmd_tx_buffer(struct dsi_display *display);
 #endif /* _DSI_DISPLAY_H_ */

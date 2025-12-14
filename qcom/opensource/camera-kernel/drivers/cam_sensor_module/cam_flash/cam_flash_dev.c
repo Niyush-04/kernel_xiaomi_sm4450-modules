@@ -231,7 +231,7 @@ static ssize_t breath_climb_store(struct device *dev, struct device_attribute *a
 }
 static DEVICE_ATTR(breath_climb, 0664, breath_climb_show, breath_climb_store);
 
-static int cam_flash_factory_test_creat()
+static int cam_flash_factory_test_creat(void)
 {
 	static struct class *wt_flashlight_class;
 	static struct device *wt_flashlight_device;

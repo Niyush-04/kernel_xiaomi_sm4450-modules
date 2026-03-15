@@ -118,7 +118,7 @@ KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/vendor/qcom/opensource/audio-kernel/soc/Module
 endif
 
 # Module information used by KBuild framework
-obj-$(CONFIG_SND_SOC_FS15XX)    += fs15xx_dlkm.o
-fs15xx_dlkm-y := $(FS15XX_OBJS)
+obj-$(CONFIG_SND_SOC_FS15XX)    += fs1599_dlkm.o
+fs1599_dlkm-y := $(FS15XX_OBJS)
 
 DEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"

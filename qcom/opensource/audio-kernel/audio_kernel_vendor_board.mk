@@ -44,7 +44,9 @@ BOARD_VENDOR_KERNEL_MODULES += $(KERNEL_MODULES_OUT)/q6_notifier_dlkm.ko\
 	$(KERNEL_MODULES_OUT)/wcd938x_slave_dlkm.ko \
 	$(KERNEL_MODULES_OUT)/wcd937x_dlkm.ko \
 	$(KERNEL_MODULES_OUT)/wcd937x_slave_dlkm.ko \
-	$(KERNEL_MODULES_OUT)/hdmi_dlkm.ko
+	$(KERNEL_MODULES_OUT)/hdmi_dlkm.ko \
+	$(KERNEL_MODULES_OUT)/sipa_dlkm.ko \
+	$(KERNEL_MODULES_OUT)/sipa_tuning_dlkm.ko
 endif
 endif
 endif
